@@ -2,19 +2,9 @@ library(shiny)
 library(readr)
 library(readxl)
 library(ggplot2)
-library(ggridges)
-library(maps)
-library(ellipse) 
-library(corrplot)
 library(dplyr)
-library(reshape2)
-library(viridis)
-library(scales)
-library(ggmosaic)
 library(plotly)
-library(GGally)
-library(ggthemes)
-library(lubridate)
+
 
 
 studentPerformance <- read_csv("studentsPerformance.csv")
@@ -148,3 +138,4 @@ server <- function(input, output) {
 
 # Run the application 
 shinyApp(ui = ui, server = server)
+
