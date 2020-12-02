@@ -1,0 +1,243 @@
+---
+title: "Final"
+author: "Logan Preuss"
+date: "11/24/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+This data set is from kaggle. It consisted of 8 columns of data all with 1000 entries. The data set is on math, reading, and writing scores along with some other data like gender, parents level of education and test prep work. I am assuming that the data is from a high school or similar level. First I examined the data to see if there were any missing values and there was not. Then I created my factors. Visually I like to look at letter grades so I used some code to apply letter grades to the scores along with a GPA. Then I was ready to start my analysis. 
+
+```{r}
+library(shiny)
+library(readr)
+library(readxl)
+library(ggplot2)
+library(dplyr)
+library(plotly)
+library(corrplot)
+library(ellipse)
+
+studentPerformance <- read_csv("studentsPerformance.csv")
+studentPerformance$gender <- as.factor(studentPerformance$gender)
+studentPerformance$race.ethnicity <- as.factor(studentPerformance$race.ethnicity)
+studentPerformance$parental.level.of.education <- as.factor(studentPerformance$parental.level.of.education)
+studentPerformance$lunch <- as.factor(studentPerformance$lunch)
+studentPerformance$test.preparation.course  <- as.factor(studentPerformance$test.preparation.course )
+
+getGrade <- function(score) {
+  if(score >= 90 & score <= 100) {
+      return("A")
+    } else {
+        if(score >= 85 & score <= 89) {
+          return("A-")
+        } else {
+            if(score >= 80 & score <= 84) {
+              return("B+")
+            } else {
+                if(score >= 75 & score <= 79) {
+                  return("B")
+                } else {
+                    if(score >= 70 & score <= 74) {
+                      return("B-")
+                    } else {
+                        if(score >= 65 & score <= 69) {
+                          return ("C")
+                        } else {
+                          if(score >= 50 & score <= 64) {
+                            return ("D")
+                          } else {
+                              if(score > 0 & score <= 49) {
+                                return ("E")
+                              } else {
+                                  return ("F")
+                              }
+                            }
+                        }
+                    }
+                  }
+             }
+        }
+      }
+}
+
+getWeight<-function(grade){
+  weight <- switch(grade, 
+                   "A"=4.00, 
+                   "A-"=3.67, 
+                   "B+"=3.33, 
+                   "B"=3.00, 
+                   "B-"=2.50, 
+                   "C"=2.0, 
+                   "D"=1.0, 
+                   "E"=0.00, 
+                   "F"=0.00)
+  return(weight)
+}
+
+studentPerformance$math.grade <- sapply(studentPerformance$math.score, FUN=getGrade)
+studentPerformance$reading.grade <- sapply(studentPerformance$reading.score, FUN=getGrade)
+studentPerformance$writing.grade <- sapply(studentPerformance$writing.score, FUN=getGrade)
+
+studentPerformance$math.weight <- sapply(studentPerformance$math.grade, FUN=getWeight)
+studentPerformance$reading.weight <- sapply(studentPerformance$reading.grade, FUN=getWeight)
+studentPerformance$writing.weight <- sapply(studentPerformance$writing.grade, FUN=getWeight)
+
+studentPerformance$math.grade <- with(studentPerformance, 
+    ifelse(math.score >= 90 & math.score <= 100, "A",
+      ifelse(math.score >= 85 & math.score <= 89, "A-",
+          ifelse(math.score >= 80 & math.score <= 84, "B+",    
+               ifelse(math.score >= 75 & math.score <= 79, "B", 
+                      ifelse(math.score >= 70 & math.score <= 74, "B-",
+                             ifelse(math.score >= 65 & math.score <= 69, "C",
+                                    ifelse(math.score >= 50 & math.score <= 64, "D",
+                                           ifelse(math.score >= 0 & math.score <= 49, "D", "F"
+     )))))))))
+
+studentPerformance$GPA <- apply(cbind(studentPerformance$math.weight, studentPerformance$reading.weight, studentPerformance$writing.weight),1, FUN=mean)
+studentPerformance <- subset(studentPerformance, select=-c(lunch))
+studentPerformance$math.grade <- as.factor(studentPerformance$math.grade)
+studentPerformance$writing.grade <- as.factor(studentPerformance$writing.grade)
+
+#View(studentPerformance)
+
+```
+
+
+First I was curious to see if the 3 scores were corrolated with each other. So I created a corrolation plot. I could see that they are all 3 very closely corrolated but the reading and writing were the most corrolated. This means that if a student does well in one section they are most likely going to do well in the other sections.
+
+
+```{r}
+par(mfrow=c(1,2))   #plot side by side
+corrData <- as.matrix(studentPerformance[, c(5,6,7)]) #subset that only include continuous variables
+correl <- cor(corrData) #find correlations of all the variables
+corrplot(correl, method="number", type = "upper") #plot correlation numbers
+corrplot(correl, method="circle", type = "upper")
+```
+
+My main question I was trying to answer was what ethnicity group is the smartest and why. I began by looking at the math grades for each ethnicity group. I noticed that Group E had more A's than the other groups. I found the group means and ran an ANOVA test. The group mean for E was 6% bigger than the rest of the groups and the ANOVA test backed that hypothesis up becasue I rejected the null hypothesis of the means being the same. So group E has a higher math grade.
+
+```{r}
+ggplot(studentPerformance, aes(x = race.ethnicity, fill=math.grade )) + 
+  theme_bw() +
+  geom_bar() +
+  labs(y = "Race Group",
+       subtitle="Does a particular race excel at math?")
+
+xtabs(formula=math.score~race.ethnicity,
+      aggregate(math.score~race.ethnicity, 
+                data=studentPerformance,mean))
+
+ggplot(data=studentPerformance, mapping=aes(x=race.ethnicity, y=math.score, col=race.ethnicity ))+
+  theme_bw() +
+  geom_boxplot()+
+  scale_y_continuous(limits=c(0,110),breaks = seq(0,110,10))+
+  labs(subtitle="Does a particular race excel at math?", x="Race Group",       y="Math Score")+
+  theme(panel.grid.minor = element_blank())
+
+p <- aov(data = studentPerformance, math.score ~ race.ethnicity)
+summary(p)
+
+```
+
+I began by looking at the reading grades for each ethnicity group. I noticed that Group E had more A's than the other groups. I found the group means and ran an ANOVA test. The group mean for E was 3% bigger than the rest of the groups and the ANOVA test backed that hypothesis up becasue I rejected the null hypothesis of the means being the same. So group E has a higher reading grade.
+
+
+```{r}
+ggplot(studentPerformance, aes(x = race.ethnicity, fill=reading.grade )) + 
+  theme_bw() +
+  geom_bar() +
+  labs(y = "Race Group",
+       subtitle="Does a particular race excel at reading?")
+
+xtabs(formula=reading.score~race.ethnicity,
+      aggregate(reading.score~race.ethnicity, 
+                data=studentPerformance,mean))
+
+ggplot(data=studentPerformance, mapping=aes(x=race.ethnicity, y=reading.score, col=race.ethnicity ))+
+  theme_bw() +
+  geom_boxplot()+
+  scale_y_continuous(limits=c(0,110),breaks = seq(0,110,10))+
+  labs(subtitle="Does a particular race excel at reading?", x="Race Group",       y="Reading Score")+
+  theme(panel.grid.minor = element_blank())
+
+p <- aov(data = studentPerformance, reading.score ~ race.ethnicity)
+summary(p)
+```
+
+I began by looking at the writing grades for each ethnicity group. I noticed that Group E had more A's than the other groups. I found the group means and ran an ANOVA test. The group mean for E was 1% bigger than the rest of the groups and the ANOVA test backed that hypothesis up becasue I rejected the null hypothesis of the means being the same. So group E has a higher writing grade by a small margin.
+
+```{r}
+ggplot(studentPerformance, aes(x = race.ethnicity, fill=writing.grade )) + 
+  theme_bw() +
+  geom_bar() +
+  labs(y = "Race Group",
+       subtitle="Does a particular race excel at writing?")
+
+xtabs(formula=writing.score~race.ethnicity,
+      aggregate(writing.score~race.ethnicity, 
+                data=studentPerformance,mean))
+
+ggplot(data=studentPerformance, mapping=aes(x=race.ethnicity, y=writing.score, col=race.ethnicity ))+
+  theme_bw() +
+  geom_boxplot()+
+  scale_y_continuous(limits=c(0,110),breaks = seq(0,110,10))+
+  labs(subtitle="Does a particular race excel at writing?", x="Race Group",       y="Writing Score")+
+  theme(panel.grid.minor = element_blank())
+
+p <- aov(data = studentPerformance, writing.score ~ race.ethnicity)
+summary(p)
+```
+
+After examing all 3 scores and testing the significance I was able to see that group E was the best in all 3 categories. Now I was trying to look into why that group was better. I started with the test prep course that was offered to take before the test. After looking at the graph I could see that the proportion was very similar between all of the groups so that most likely was not a factor in why they scored better.
+
+```{r}
+p <- ggplot(studentPerformance, aes(x = race.ethnicity, fill=test.preparation.course, order=test.preparation.course)) + 
+  theme_bw() +
+  geom_bar(position = position_stack(reverse = TRUE)) +
+  labs(subtitle="Does Practice really makes Perfect?", x="Race Group",       y="Number of sample")+
+  theme(panel.grid.minor = element_blank(), axis.text.x = element_text(angle = 45, hjust = 1))
+
+ggplotly(p)
+```
+
+Next I looked at gender. I wanted to see if group E had more of one gender but after looking at the data I could see that the proportion of the gender is very similar for all groups. This meant that gender most likely did not play a role in why group E performed better.
+
+```{r}
+p <- ggplot(studentPerformance, aes(x = race.ethnicity, fill=gender, order=gender)) + 
+  theme_bw() +
+  geom_bar(position = position_stack(reverse = TRUE)) +
+  labs(subtitle="Does Gender effect the Race Group?", x="Race Group",       y="Number of sample")+
+  theme(panel.grid.minor = element_blank(), axis.text.x = element_text(angle = 45, hjust = 1))
+
+ggplotly(p)
+```
+
+Finally I was able to look at parent level of education. After examining the data I found that group E had the lowest proportion of some high school and high school education and the highest proportion in associates degrees. Based on this data and having no other variables I would say that parent level of education does effect the scores more than the other two categories. I can say this becasue overall this group has the lowest high school education and the highest college experience and they also perform the best on exams.
+
+```{r}
+p <- ggplot(studentPerformance, aes(x = race.ethnicity, fill=parental.level.of.education, order=parental.level.of.education)) + 
+  theme_bw() +
+  geom_bar(position = position_stack(reverse = TRUE)) +
+  labs(subtitle="Does Parents Education Matter?", x="Race Group",       y="Number of sample")+
+  theme(panel.grid.minor = element_blank(), axis.text.x = element_text(angle = 45, hjust = 1))
+
+ggplotly(p)
+```
+
+I then wanted to look at what score would best predict a students GPA. I made a linear model for each of the scores. All of the models fit the data very well so any could be used for a prediction. However the best model was the reading score and the worst was the math score. 
+
+```{r}
+model1 <- lm(data = studentPerformance, GPA ~ math.score)
+summary(model1)
+
+model2 <- lm(data = studentPerformance, GPA ~ reading.score)
+summary(model2)
+
+model3 <- lm(data = studentPerformance, GPA ~ writing.score)
+summary(model3)
+```
+
